@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../providers/auth_provider.dart';
 import 'register_screen.dart';
 import 'forgot_password_screen.dart';
+
+// 🔥 Thêm Import 2 trang điều hướng
+import 'home_screen.dart';
+import '../admin/admin_dashboard_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -18,8 +23,10 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _rememberMe = false;
   final Color _primaryColor = const Color(0xFFAAC48F); // Màu xanh bơ
 
+  // =========================================================
+  // LOGIC XỬ LÝ ĐĂNG NHẬP VÀ PHÂN LUỒNG
+  // =========================================================
   void _handleLogin() async {
-    // Logic đăng nhập giữ nguyên
     final phone = _phoneController.text.trim();
     final pass = _passwordController.text.trim();
 
@@ -28,18 +35,42 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
-    final result = await context.read<AuthProvider>().login(phone, pass);
+    // Đóng bàn phím khi đang xử lý đăng nhập
+    FocusScope.of(context).unfocus();
+
+    final authProvider = context.read<AuthProvider>();
+    final result = await authProvider.login(phone, pass);
+    
     if (!mounted) return;
 
     if (result == 'success') {
-      Navigator.pop(context);
+      // 🔥 KIỂM TRA QUYỀN ĐỂ ĐIỀU HƯỚNG
+      if (authProvider.isAdmin) {
+        // Tài khoản Admin -> Vào trang Quản trị và xóa lịch sử
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
+          (route) => false, 
+        );
+      } else {
+        // Tài khoản User -> Vào trang Chủ và xóa lịch sử
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => const HomeScreen()),
+          (route) => false,
+        );
+      }
     } else {
+      // Hiển thị thông báo lỗi
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result), backgroundColor: Colors.red.shade400));
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    // Lấy trạng thái loading để vô hiệu hóa nút nếu đang xử lý
+    final isLoading = context.watch<AuthProvider>().isLoading;
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -98,9 +129,18 @@ class _LoginScreenState extends State<LoginScreen> {
             SizedBox(
               width: double.infinity, height: 52,
               child: ElevatedButton(
-                onPressed: _handleLogin,
-                style: ElevatedButton.styleFrom(backgroundColor: _primaryColor, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)), elevation: 0),
-                child: const Text("Đăng Nhập", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                onPressed: isLoading ? null : _handleLogin,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _primaryColor, 
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)), 
+                  elevation: 0
+                ),
+                child: isLoading
+                    ? const SizedBox(
+                        width: 24, height: 24, 
+                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
+                      )
+                    : const Text("Đăng Nhập", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
               ),
             ),
 

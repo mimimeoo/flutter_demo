@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
-import 'register_otp_screen.dart'; // Màn hình OTP dành riêng cho Đăng ký
+import 'package:provider/provider.dart';
+
+import '../providers/auth_provider.dart';
+import 'home_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -32,8 +35,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
-  // HÀM KIỂM TRA ĐIỀU KIỆN & ĐĂNG KÝ
-  void _handleRegister() {
+  // HÀM KIỂM TRA ĐIỀU KIỆN & GỌI API ĐĂNG KÝ
+  void _handleRegister() async {
     final name = _nameController.text.trim();
     final phone = _phoneController.text.trim();
     final email = _emailController.text.trim();
@@ -77,12 +80,28 @@ class _RegisterScreenState extends State<RegisterScreen> {
       return;
     }
 
-    // NẾU TẤT CẢ ĐỀU HỢP LỆ -> CHUYỂN SANG TRANG XÁC THỰC OTP
-    // (Trong ứng dụng thực tế, bạn sẽ gọi API gửi mã OTP về email ở bước này)
-    Navigator.push(
-      context, 
-      MaterialPageRoute(builder: (_) => RegisterOtpScreen(email: email))
-    );
+    // Đóng bàn phím
+    FocusScope.of(context).unfocus();
+
+    // 7. GỌI API ĐĂNG KÝ TỪ AUTH PROVIDER
+    final authProvider = context.read<AuthProvider>();
+    final result = await authProvider.register(name, email, phone, pass);
+    
+    if (!mounted) return;
+
+    if (result == 'success') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Đăng ký thành công!"), backgroundColor: Colors.green)
+      );
+      // Đăng ký xong tự động vào HomeScreen và xóa lịch sử trang
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        (route) => false,
+      );
+    } else {
+      _showError(result); // Hiện thông báo lỗi trùng lặp từ Server
+    }
   }
 
   void _showError(String message) {
@@ -98,6 +117,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isLoading = context.watch<AuthProvider>().isLoading;
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -159,9 +180,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
             SizedBox(
               width: double.infinity, height: 52,
               child: ElevatedButton(
-                onPressed: _handleRegister, // Gọi hàm kiểm tra
-                style: ElevatedButton.styleFrom(backgroundColor: _primaryColor, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)), elevation: 0),
-                child: const Text("Đăng Ký", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                onPressed: isLoading ? null : _handleRegister,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _primaryColor, 
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)), 
+                  elevation: 0
+                ),
+                child: isLoading
+                    ? const SizedBox(
+                        width: 24, height: 24, 
+                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
+                      )
+                    : const Text("Đăng Ký", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
               ),
             ),
 

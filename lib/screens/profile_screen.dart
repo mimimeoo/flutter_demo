@@ -34,7 +34,6 @@ class ProfileScreen extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(24, 60, 24, 32),
             decoration: const BoxDecoration(
               color: Color(0xFFF3F9F3), // Màu xanh nhạt đồng bộ Menu và Home
-              // Đã xóa thuộc tính borderRadius ở đây
             ),
             child: Row(
               children: [
@@ -53,29 +52,43 @@ class ProfileScreen extends StatelessWidget {
                 ),
                 const SizedBox(width: 20),
 
-                /// USER INFO
+                /// USER INFO (CẬP NHẬT THÊM EMAIL)
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Tên người dùng
                       Text(
-                        user.name,
-                        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF1A1D26)), // Đổi sang chữ tối màu
+                        user.name.isEmpty ? "Người dùng" : user.name,
+                        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF1A1D26)),
                         maxLines: 1, overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.white, // Nền trắng cho số điện thoại
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.grey.shade200),
+                      const SizedBox(height: 4),
+                      
+                      // 🔥 THÊM MỚI: Email đã đăng ký
+                      if (user.email.isNotEmpty) ...[
+                        Text(
+                          user.email,
+                          style: TextStyle(fontSize: 14, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
+                          maxLines: 1, overflow: TextOverflow.ellipsis,
                         ),
-                        child: Text(
-                          user.phone,
-                          style: TextStyle(fontSize: 13, color: Colors.grey.shade700, fontWeight: FontWeight.w500),
+                        const SizedBox(height: 8),
+                      ],
+                      
+                      // Số điện thoại (badge)
+                      if (user.phone.isNotEmpty)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.white, 
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.grey.shade200),
+                          ),
+                          child: Text(
+                            user.phone,
+                            style: TextStyle(fontSize: 13, color: Colors.grey.shade700, fontWeight: FontWeight.w500),
+                          ),
                         ),
-                      ),
                     ],
                   ),
                 ),
