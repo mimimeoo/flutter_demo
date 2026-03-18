@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:provider/provider.dart';
+
+import '../providers/auth_provider.dart';
 
 class AddressScreen extends StatefulWidget {
   const AddressScreen({super.key});
@@ -8,57 +12,67 @@ class AddressScreen extends StatefulWidget {
 }
 
 class _AddressScreenState extends State<AddressScreen> {
-  // Cập nhật màu xanh đồng bộ với trang Giỏ hàng
   final Color _primaryGreen = const Color(0xFFAAC48F); 
-  
-  // Khởi tạo danh sách địa chỉ rỗng
-  List<Map<String, dynamic>> _addresses = [];
 
-  // =======================================================
-  // LOGIC XỬ LÝ
-  // =======================================================
-
-  void _deleteAddress(String id) {
-    setState(() {
-      _addresses.removeWhere((addr) => addr['id'] == id);
-      // Nếu lỡ xóa mất địa chỉ mặc định, tự động gán địa chỉ đầu tiên làm mặc định (nếu còn)
-      if (_addresses.isNotEmpty && !_addresses.any((a) => a['isDefault'] == true)) {
-        _addresses.first['isDefault'] = true;
-      }
-    });
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Đã xóa địa chỉ")));
+  // Hàm suy luận Icon dựa vào tên
+  IconData _getIcon(String title) {
+    return title.toLowerCase().contains("công ty") ? Icons.domain : Icons.home_rounded;
   }
 
-  void _saveAddress({String? id, required Map<String, dynamic> newData}) {
-    setState(() {
-      // Nếu địa chỉ đầu tiên được thêm vào -> Ép buộc làm mặc định
-      if (_addresses.isEmpty) {
-        newData['isDefault'] = true;
-      } 
-      // Nếu người dùng tick chọn "Đặt làm mặc định", phải gỡ mặc định của các địa chỉ cũ
-      else if (newData['isDefault'] == true) {
-        for (var addr in _addresses) {
-          addr['isDefault'] = false;
+  // =======================================================
+  // LOGIC LƯU LÊN FIREBASE
+  // =======================================================
+  void _deleteAddress(String userId, String id, bool isDefault) async {
+    final collection = FirebaseFirestore.instance.collection('users').doc(userId).collection('addresses');
+    await collection.doc(id).delete();
+    
+    // Nếu xóa mất địa chỉ mặc định, tự động lấy 1 địa chỉ khác làm mặc định
+    if (isDefault) {
+      final remaining = await collection.limit(1).get();
+      if (remaining.docs.isNotEmpty) {
+        await remaining.docs.first.reference.update({'isDefault': true});
+      }
+    }
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Đã xóa địa chỉ")));
+  }
+
+  void _saveAddress(String userId, List<Map<String, dynamic>> currentList, {String? id, required Map<String, dynamic> newData}) async {
+    final collection = FirebaseFirestore.instance.collection('users').doc(userId).collection('addresses');
+
+    // Ép làm mặc định nếu là địa chỉ đầu tiên
+    if (currentList.isEmpty) {
+      newData['isDefault'] = true;
+    } 
+
+    // Nếu chọn làm mặc định, phải tắt mặc định của các địa chỉ cũ
+    if (newData['isDefault'] == true) {
+      final batch = FirebaseFirestore.instance.batch();
+      final defaultDocs = await collection.where('isDefault', isEqualTo: true).get();
+      for (var doc in defaultDocs.docs) {
+        if (doc.id != id) {
+          batch.update(doc.reference, {'isDefault': false});
         }
       }
+      await batch.commit();
+    }
 
-      if (id == null) {
-        // THÊM MỚI
-        _addresses.add(newData);
-      } else {
-        // CẬP NHẬT
-        int index = _addresses.indexWhere((a) => a['id'] == id);
-        if (index != -1) _addresses[index] = newData;
-      }
-    });
+    if (id == null) {
+      // THÊM MỚI
+      final newDoc = collection.doc();
+      newData['id'] = newDoc.id; // Lưu id vào trong data luôn cho tiện
+      await newDoc.set(newData);
+    } else {
+      // CẬP NHẬT
+      await collection.doc(id).update(newData);
+    }
   }
 
   // =======================================================
   // BOTTOM SHEET: FORM THÊM / SỬA ĐỊA CHỈ
   // =======================================================
-  void _showAddressForm({String? id}) {
+  void _showAddressForm(String userId, List<Map<String, dynamic>> currentList, {String? id}) {
     final isEditing = id != null;
-    final addressData = isEditing ? _addresses.firstWhere((a) => a['id'] == id) : null;
+    final addressData = isEditing ? currentList.firstWhere((a) => a['id'] == id) : null;
 
     final titleController = TextEditingController(text: addressData?['title'] ?? '');
     final nameController = TextEditingController(text: addressData?['name'] ?? '');
@@ -111,8 +125,7 @@ class _AddressScreenState extends State<AddressScreen> {
                           
                           const SizedBox(height: 16),
 
-                          // Switch Đặt làm mặc định (Chỉ hiển thị nếu chưa phải là mặc định để tránh tắt nhầm)
-                          if (!isDefault || _addresses.length <= 1)
+                          if (!isDefault || currentList.length <= 1)
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
@@ -130,7 +143,6 @@ class _AddressScreenState extends State<AddressScreen> {
                     ),
                   ),
 
-                  // Nút LƯU
                   SafeArea(
                     child: Padding(
                       padding: const EdgeInsets.only(bottom: 16.0),
@@ -145,16 +157,14 @@ class _AddressScreenState extends State<AddressScreen> {
                             }
 
                             final newData = {
-                              "id": isEditing ? addressData!['id'] : DateTime.now().millisecondsSinceEpoch.toString(),
                               "title": titleController.text.isNotEmpty ? titleController.text : "Khác",
                               "name": nameController.text,
                               "phone": phoneController.text,
                               "address": addressController.text,
-                              "icon": titleController.text.toLowerCase().contains("công ty") ? Icons.domain : Icons.home_rounded,
                               "isDefault": isDefault,
                             };
 
-                            _saveAddress(id: isEditing ? addressData!['id'] : null, newData: newData);
+                            _saveAddress(userId, currentList, id: isEditing ? addressData!['id'] : null, newData: newData);
                             Navigator.pop(context);
                           },
                           style: ElevatedButton.styleFrom(
@@ -181,11 +191,17 @@ class _AddressScreenState extends State<AddressScreen> {
   // =======================================================
   @override
   Widget build(BuildContext context) {
-    final defaultAddresses = _addresses.where((a) => a['isDefault'] == true).toList();
-    final otherAddresses = _addresses.where((a) => a['isDefault'] != true).toList();
+    final userId = context.watch<AuthProvider>().currentUser?.id;
+
+    if (userId == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text("Địa chỉ giao hàng"), backgroundColor: Colors.white, foregroundColor: Colors.black, elevation: 0),
+        body: const Center(child: Text("Vui lòng đăng nhập để quản lý địa chỉ")),
+      );
+    }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5), // Nền xám nhạt
+      backgroundColor: const Color(0xFFF5F5F5),
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
@@ -195,86 +211,95 @@ class _AddressScreenState extends State<AddressScreen> {
           child: GestureDetector(
             onTap: () => Navigator.pop(context),
             child: Container(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.grey.shade300),
-              ),
+              decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Colors.grey.shade300)),
               child: Icon(Icons.arrow_back, color: Colors.grey.shade600, size: 20),
             ),
           ),
         ),
         title: const Text("Địa chỉ giao hàng", style: TextStyle(color: Colors.black, fontSize: 18, fontWeight: FontWeight.bold)),
-        actions: [
-          TextButton(
-            onPressed: () => _showAddressForm(),
-            child: Text("+ Thêm", style: TextStyle(color: _primaryGreen, fontSize: 15, fontWeight: FontWeight.bold)),
-          )
-        ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // DANH SÁCH ĐỊA CHỈ MẶC ĐỊNH
-            if (defaultAddresses.isNotEmpty) ...[
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8.0),
-                child: Text("Địa chỉ mặc định", style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey.shade600)),
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance.collection('users').doc(userId).collection('addresses').snapshots(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+
+          // Chuyển dữ liệu Firebase thành List Map
+          final addresses = snapshot.data!.docs.map((doc) {
+            var data = doc.data() as Map<String, dynamic>;
+            data['id'] = doc.id; // Gắn ID của tài liệu vào data
+            return data;
+          }).toList();
+
+          final defaultAddresses = addresses.where((a) => a['isDefault'] == true).toList();
+          final otherAddresses = addresses.where((a) => a['isDefault'] != true).toList();
+
+          return Stack(
+            children: [
+              SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (defaultAddresses.isNotEmpty) ...[
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8.0),
+                        child: Text("Địa chỉ mặc định", style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey.shade600)),
+                      ),
+                      ...defaultAddresses.map((addr) => _buildAddressCard(userId, addresses, addr)),
+                    ],
+
+                    if (otherAddresses.isNotEmpty) ...[
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8.0),
+                        child: Text("Địa chỉ khác", style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey.shade600)),
+                      ),
+                      ...otherAddresses.map((addr) => _buildAddressCard(userId, addresses, addr)),
+                    ],
+
+                    if (addresses.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 40, bottom: 20),
+                        child: Center(child: Text("Bạn chưa có địa chỉ giao hàng nào.", style: TextStyle(color: Colors.grey.shade500))),
+                      ),
+
+                    const SizedBox(height: 16),
+                    _buildMapSection(),
+                    const SizedBox(height: 100), 
+                  ],
+                ),
               ),
-              ...defaultAddresses.map((addr) => _buildAddressCard(addr)),
+
+              // Nút Thêm cố định ở đáy
+              Positioned(
+                bottom: 0, left: 0, right: 0,
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  color: const Color(0xFFF5F5F5),
+                  child: ElevatedButton.icon(
+                    onPressed: () => _showAddressForm(userId, addresses),
+                    icon: const Icon(Icons.add_circle_outline, color: Colors.white),
+                    label: const Text("Thêm địa chỉ mới", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _primaryGreen,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      elevation: 0,
+                    ),
+                  ),
+                ),
+              )
             ],
-
-            // DANH SÁCH ĐỊA CHỈ KHÁC
-            if (otherAddresses.isNotEmpty) ...[
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8.0),
-                child: Text("Địa chỉ khác", style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey.shade600)),
-              ),
-              ...otherAddresses.map((addr) => _buildAddressCard(addr)),
-            ],
-
-            if (_addresses.isEmpty)
-               Padding(
-                 padding: const EdgeInsets.only(top: 40, bottom: 20),
-                 child: Center(child: Text("Bạn chưa có địa chỉ giao hàng nào.", style: TextStyle(color: Colors.grey.shade500))),
-               ),
-
-            const SizedBox(height: 16),
-
-            // KHU VỰC BẢN ĐỒ
-            _buildMapSection(),
-
-            const SizedBox(height: 100), // Khoảng trống cho nút cuộn
-          ],
-        ),
-      ),
-      
-      // NÚT THÊM ĐỊA CHỈ MỚI (DƯỚI ĐÁY)
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      floatingActionButton: Container(
-        padding: const EdgeInsets.all(16),
-        width: double.infinity,
-        child: ElevatedButton.icon(
-          onPressed: () => _showAddressForm(),
-          icon: const Icon(Icons.add_circle_outline, color: Colors.white),
-          label: const Text("Thêm địa chỉ mới", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: _primaryGreen,
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            elevation: 0,
-          ),
-        ),
+          );
+        },
       ),
     );
   }
 
   // WIDGET: Thẻ Địa chỉ
-  Widget _buildAddressCard(Map<String, dynamic> data) {
+  Widget _buildAddressCard(String userId, List<Map<String, dynamic>> currentList, Map<String, dynamic> data) {
     return GestureDetector(
       onTap: () {
-        // CHỌN ĐỊA CHỈ -> TRẢ VỀ KẾT QUẢ CHO TRANG TRƯỚC
+        // TRẢ VỀ CHO TRANG CHECKOUT
         Navigator.pop(context, data);
       },
       child: Container(
@@ -292,16 +317,14 @@ class _AddressScreenState extends State<AddressScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Icon và Tên gợi nhớ
                   Row(
                     children: [
-                      Icon(data['icon'], color: data['isDefault'] ? const Color(0xFFD84315) : const Color(0xFF1565C0), size: 20),
+                      Icon(_getIcon(data['title']), color: data['isDefault'] == true ? const Color(0xFFD84315) : const Color(0xFF1565C0), size: 20),
                       const SizedBox(width: 8),
                       Text(data['title'], style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87)),
                     ],
                   ),
                   const SizedBox(height: 12),
-                  // Thông tin chi tiết
                   Text(data['name'], style: const TextStyle(fontSize: 14, color: Colors.black87, fontWeight: FontWeight.w500)),
                   const SizedBox(height: 4),
                   Text(data['phone'], style: const TextStyle(fontSize: 14, color: Colors.black87)),
@@ -311,12 +334,11 @@ class _AddressScreenState extends State<AddressScreen> {
               ),
             ),
             const Divider(height: 1, color: Color(0xFFEEEEEE)),
-            // Các nút hành động (Chỉnh sửa / Xóa)
             Row(
               children: [
                 Expanded(
                   child: InkWell(
-                    onTap: () => _showAddressForm(id: data['id']),
+                    onTap: () => _showAddressForm(userId, currentList, id: data['id']),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       child: Center(child: Text("Chỉnh sửa", style: TextStyle(color: _primaryGreen, fontWeight: FontWeight.bold, fontSize: 14))),
@@ -325,7 +347,7 @@ class _AddressScreenState extends State<AddressScreen> {
                 ),
                 Expanded(
                   child: InkWell(
-                    onTap: () => _deleteAddress(data['id']),
+                    onTap: () => _deleteAddress(userId, data['id'], data['isDefault'] ?? false),
                     child: const Padding(
                       padding: EdgeInsets.symmetric(vertical: 12),
                       child: Center(child: Text("Xóa", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 14))),
@@ -340,43 +362,21 @@ class _AddressScreenState extends State<AddressScreen> {
     );
   }
 
-  // WIDGET: Khu vực giả lập bản đồ
   Widget _buildMapSection() {
     return Container(
       height: 140,
       width: double.infinity,
-      decoration: BoxDecoration(
-        color: const Color(0xFFE3F2FD), // Nền xanh nhạt giả sông/nước
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFFE3F2FD), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade200)),
       child: Stack(
         alignment: Alignment.center,
         children: [
-          // Vẽ vài đường kẻ mờ giả lập đường phố
-          CustomPaint(
-            size: Size.infinite,
-            painter: MapGridPainter(),
-          ),
-          // Ghim đỏ (Pin)
-          const Positioned(
-            top: 25,
-            child: Icon(Icons.location_on, color: Colors.red, size: 40),
-          ),
-          // Nút chọn vị trí
+          CustomPaint(size: Size.infinite, painter: MapGridPainter()),
+          const Positioned(top: 25, child: Icon(Icons.location_on, color: Colors.red, size: 40)),
           Positioned(
-            bottom: 16,
-            left: 16,
-            right: 16,
+            bottom: 16, left: 16, right: 16,
             child: ElevatedButton(
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Chức năng bản đồ cần tích hợp Google Maps SDK")));
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _primaryGreen,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                elevation: 2,
-              ),
+              onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Chức năng bản đồ cần tích hợp Google Maps SDK"))),
+              style: ElevatedButton.styleFrom(backgroundColor: _primaryGreen, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)), elevation: 2),
               child: const Text("Chọn vị trí trên bản đồ", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
             ),
           )
@@ -385,7 +385,6 @@ class _AddressScreenState extends State<AddressScreen> {
     );
   }
 
-  // WIDGET HỖ TRỢ: Tiêu đề input
   Widget _buildInputLabel(String text) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8.0, top: 12.0),
@@ -393,7 +392,6 @@ class _AddressScreenState extends State<AddressScreen> {
     );
   }
 
-  // WIDGET HỖ TRỢ: Ô nhập liệu
   Widget _buildTextField(TextEditingController controller, String hint, {TextInputType keyboardType = TextInputType.text}) {
     return TextField(
       controller: controller,
@@ -411,20 +409,14 @@ class _AddressScreenState extends State<AddressScreen> {
   }
 }
 
-// LỚP HỖ TRỢ VẼ GIẢ LẬP ĐƯỜNG PHỐ BẢN ĐỒ
 class MapGridPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.white.withOpacity(0.6)
-      ..strokeWidth = 4.0;
-    
-    // Vẽ vài đường chéo giả đường đi
+    final paint = Paint()..color = Colors.white.withOpacity(0.6)..strokeWidth = 4.0;
     canvas.drawLine(const Offset(0, 40), Offset(size.width, 80), paint);
     canvas.drawLine(Offset(size.width * 0.3, 0), Offset(size.width * 0.7, size.height), paint);
     canvas.drawLine(Offset(0, size.height - 20), Offset(size.width, 10), paint);
   }
-
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

@@ -13,7 +13,16 @@ class ProfileScreen extends StatelessWidget {
     final auth = context.watch<AuthProvider>();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC), 
+      backgroundColor: const Color(0xFFF5F7FA), // Nền xám nhạt làm nổi bật các thẻ trắng
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        centerTitle: true,
+        title: const Text(
+          "Tài khoản",
+          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 18),
+        ),
+      ),
       body: auth.isLoggedIn
           ? _buildProfile(context, auth.currentUser!)
           : _buildGuest(context),
@@ -21,51 +30,50 @@ class ProfileScreen extends StatelessWidget {
   }
 
   // ==========================================
-  // PROFILE UI (ĐÃ ĐĂNG NHẬP)
+  // PROFILE UI (ĐÃ ĐĂNG NHẬP) - DẠNG GROUPED CARDS
   // ==========================================
   Widget _buildProfile(BuildContext context, UserModel user) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.only(bottom: 120),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          /// 1. HEADER (Màu giống Menu, Không bo góc)
+          /// 1. THẺ THÔNG TIN NGƯỜI DÙNG (USER INFO CARD)
           Container(
-            padding: const EdgeInsets.fromLTRB(24, 60, 24, 32),
-            decoration: const BoxDecoration(
-              color: Color(0xFFF3F9F3), // Màu xanh nhạt đồng bộ Menu và Home
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))
+              ],
             ),
             child: Row(
               children: [
                 /// AVATAR
                 Container(
-                  width: 76,
-                  height: 76,
+                  width: 70,
+                  height: 70,
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: const Color(0xFF66BB6A).withOpacity(0.15),
                     shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 15, offset: const Offset(0, 8))
-                    ],
                   ),
-                  child: const Icon(Icons.person_rounded, size: 40, color: Color(0xFF66BB6A)),
+                  child: const Icon(Icons.person_rounded, size: 36, color: Color(0xFF66BB6A)),
                 ),
-                const SizedBox(width: 20),
+                const SizedBox(width: 16),
 
-                /// USER INFO (CẬP NHẬT THÊM EMAIL)
+                /// INFO (Tên, Email, Số điện thoại)
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Tên người dùng
                       Text(
                         user.name.isEmpty ? "Người dùng" : user.name,
-                        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF1A1D26)),
+                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1A1D26)),
                         maxLines: 1, overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 4),
                       
-                      // 🔥 THÊM MỚI: Email đã đăng ký
                       if (user.email.isNotEmpty) ...[
                         Text(
                           user.email,
@@ -75,18 +83,17 @@ class ProfileScreen extends StatelessWidget {
                         const SizedBox(height: 8),
                       ],
                       
-                      // Số điện thoại (badge)
                       if (user.phone.isNotEmpty)
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
-                            color: Colors.white, 
-                            borderRadius: BorderRadius.circular(12),
+                            color: const Color(0xFFF5F7FA), 
+                            borderRadius: BorderRadius.circular(8),
                             border: Border.all(color: Colors.grey.shade200),
                           ),
                           child: Text(
                             user.phone,
-                            style: TextStyle(fontSize: 13, color: Colors.grey.shade700, fontWeight: FontWeight.w500),
+                            style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontWeight: FontWeight.w600),
                           ),
                         ),
                     ],
@@ -96,15 +103,12 @@ class ProfileScreen extends StatelessWidget {
                 /// EDIT BUTTON
                 Container(
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: const Color(0xFFF5F7FA),
                     shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 8, offset: const Offset(0, 4))
-                    ]
                   ),
                   child: IconButton(
                     onPressed: () {},
-                    icon: const Icon(Icons.edit_square, color: Color(0xFF66BB6A), size: 20),
+                    icon: const Icon(Icons.edit_rounded, color: Color(0xFF66BB6A), size: 20),
                   ),
                 )
               ],
@@ -113,7 +117,7 @@ class ProfileScreen extends StatelessWidget {
 
           const SizedBox(height: 24),
 
-          /// 2. NHÓM TÀI KHOẢN (Account)
+          /// 2. THẺ NHÓM: TÀI KHOẢN (ACCOUNT GROUP)
           _buildSectionTitle("Tài khoản của tôi"),
           _buildMenuGroup([
             _buildMenuTile(Icons.receipt_long_rounded, "Đơn hàng của tôi", () {}),
@@ -124,7 +128,7 @@ class ProfileScreen extends StatelessWidget {
 
           const SizedBox(height: 24),
 
-          /// 3. NHÓM CÀI ĐẶT & HỖ TRỢ (Settings)
+          /// 3. THẺ NHÓM: CÀI ĐẶT (SETTINGS GROUP)
           _buildSectionTitle("Cài đặt & Hỗ trợ"),
           _buildMenuGroup([
             _buildMenuTile(Icons.notifications_none_rounded, "Thông báo", () {}),
@@ -135,26 +139,24 @@ class ProfileScreen extends StatelessWidget {
           const SizedBox(height: 36),
 
           /// 4. NÚT ĐĂNG XUẤT
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: SizedBox(
-              width: double.infinity,
-              height: 56,
-              child: ElevatedButton(
-                onPressed: () => context.read<AuthProvider>().logout(),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: const Color(0xFFFA5151), 
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    side: const BorderSide(color: Color(0xFFFA5151), width: 1.5), 
-                  ),
+          SizedBox(
+            width: double.infinity,
+            height: 56,
+            child: ElevatedButton(
+              onPressed: () => context.read<AuthProvider>().logout(),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: const Color(0xFFFA5151), 
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: const BorderSide(color: Color(0xFFFA5151), width: 1.5), 
                 ),
-                child: const Text("Đăng xuất", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFFFA5151))),
               ),
+              child: const Text("Đăng xuất", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFFFA5151))),
             ),
           ),
+          const SizedBox(height: 100), // Khoảng trống cuộn cho Bottom Nav
         ],
       ),
     );
@@ -214,7 +216,7 @@ class ProfileScreen extends StatelessWidget {
 
   Widget _buildSectionTitle(String title) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+      padding: const EdgeInsets.only(left: 8, bottom: 12),
       child: Text(
         title.toUpperCase(),
         style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey.shade500, letterSpacing: 1.2),
@@ -224,7 +226,6 @@ class ProfileScreen extends StatelessWidget {
 
   Widget _buildMenuGroup(List<Widget> children) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
